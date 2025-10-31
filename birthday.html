@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>🎮 Тайный мини-квест</title>
+  <style>
+    :root { --text:#f4f7ff; --muted:#a7b0d8; --accent:#8b5cf6; --accent2:#22d3ee; }
+    body {margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:radial-gradient(circle at 20% 10%,#1a2050,#0a0d22 60%,#040614 100%);color:var(--text);overflow-x:hidden;}
+    .app{max-width:900px;margin:0 auto;min-height:100%;padding:32px 16px 120px;}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:24px;backdrop-filter:blur(8px);box-shadow:0 10px 40px rgba(0,0,0,0.35)}
+    h1,h2{margin:0 0 12px;} h1{font-size:clamp(28px,5vw,40px);} h2{font-size:clamp(22px,4vw,30px);} p{color:var(--muted);margin:8px 0 16px;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    button{padding:12px 16px;border-radius:12px;border:0;font-weight:700;cursor:pointer;font-size:16px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0e22;box-shadow:0 10px 20px rgba(139,92,246,.35),inset 0 1px 0 rgba(255,255,255,.3);}button:hover{transform:translateY(-1px);filter:brightness(1.05);}button:active{transform:translateY(1px);} 
+    .stage{margin-top:24px;display:none}.stage.active{display:block}
+
+    /* Balloons */
+    #balloonStage{position:relative;height:420px;overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));border-radius:16px;border:1px solid rgba(255,255,255,0.08)}
+    .hud{display:flex;gap:16px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+    .pill{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);padding:8px 12px;border-radius:999px;font-weight:700}
+    .balloon{position:absolute;width:56px;height:72px;border-radius:50% 50% 48% 48%;cursor:pointer;box-shadow:inset 0 -6px 16px rgba(0,0,0,.35),0 8px 20px rgba(0,0,0,.25)}.balloon::after{content:"";position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);width:8px;height:12px;background:currentColor;border-radius:2px}.pop{animation:pop 250ms ease-out forwards}@keyframes pop{to{transform:scale(1.2);opacity:0}}
+
+    /* Quiz */
+    .qbox{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px}
+    .opt{display:flex;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);cursor:pointer}
+    .opt:hover{filter:brightness(1.05)}
+
+    /* Dodge */
+    #dodgeArea{position:relative;height:340px;border-radius:16px;border:1px dashed rgba(255,255,255,0.2);display:grid;place-items:center;overflow:hidden}
+    #trickyBtn{position:absolute}
+
+    /* Finale & UI */
+    #confettiCanvas{position:fixed;inset:0;pointer-events:none}
+    .toast{position:fixed;left:50%;top:18%;transform:translateX(-50%) scale(0.9);background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.22);padding:10px 14px;border-radius:999px;font-weight:800;opacity:0;transition:opacity .15s, transform .15s;}
+    .toast.show{opacity:1;transform:translateX(-50%) scale(1)}
+
+    /* Bigger finale */
+    .type{font-weight:900;letter-spacing:.6px;font-size:clamp(36px,6vw,64px);text-shadow:0 6px 24px rgba(0,0,0,.35)}
+    .wish{font-size:clamp(16px,2.4vw,20px);line-height:1.6}
+    .final-row{display:grid;gap:14px;margin-top:12px}
+    .miniQ .opt{background:rgba(255,255,255,0.06)}
+  </style>
+</head>
+<body>
+  <canvas id="confettiCanvas"></canvas>
+  <div class="app">
+    <div class="card">
+      <h1>🎮 Тайный мини-квест</h1>
+      <p>Три испытания, в конце — нечто интересное 😉</p>
+
+      <div class="row"><button id="startBtn">Начать</button></div>
+
+      <!-- Stage 1: Balloons -->
+      <div id="stage1" class="stage">
+        <div class="hud">
+          <span class="pill">🎈 Лопни <b id="needCount">10</b> шариков</span>
+          <span class="pill">⏱️ <b id="timeLeft">10</b>с</span>
+          <button id="retry1" class="ghostBtn" style="margin-left:auto;display:none;">Ещё раз</button>
+        </div>
+        <div id="balloonStage"></div>
+      </div>
+
+      <!-- Stage 2: Quiz (one-by-one) -->
+      <div id="stage2" class="stage">
+        <h2>Этап 2 — Самая странная викторина</h2>
+        <div id="qBox" class="qbox"></div>
+      </div>
+
+      <!-- Stage 3: Dodge Button -->
+      <div id="stage3" class="stage">
+        <h2>Этап 3 — Поймай кнопку (очень сложно)</h2>
+        <p>Кнопка удирает от курсора. Но если играть умно и терпеливо — её можно поймать 😉</p>
+        <div id="dodgeArea" class="card" style="background:rgba(255,255,255,0.03);">
+          <button id="trickyBtn">Нажми меня 😈</button>
+        </div>
+      </div>
+
+      <!-- Finale -->
+      <div id="stage4" class="stage">
+        <h2 class="type" id="finalMsg">🎉 С Днём Рождения, Анна!</h2>
+        <p id="subMsg" class="wish">Ты прошла квест. Желаем бесконечных хихиков в минуту сегодня!</p>
+        
+        <!-- Extra surprise question container -->
+        <div id="extraQ" class="qbox miniQ" style="display:none; margin-top:14px;"></div>
+
+        <div class="final-row"><button id="againBtn">Сыграть снова</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">✔️ Правильно!</div>
+
+  <script>
+    // ===== Constants & helpers =====
+    const $ = s => document.querySelector(s);
+    const STAGES = ['stage1','stage2','stage3','stage4'];
+    const COLORS = ['#f472b6','#60a5fa','#34d399','#fbbf24','#c084fc','#2dd4bf','#fb7185'];
+    const NAME = 'Anna';
+
+    function show(id){ STAGES.forEach(s => { const el = document.getElementById(s); if(!el) return; el.classList.toggle('active', s===id); }); }
+    function toastOK(){ const el = $('#toast'); el.textContent = '✔️ Правильно!'; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),700); }
+
+    // Sparkle chime
+    function playChime(){ try{ const ac = new (window.AudioContext||window.webkitAudioContext)(); const t = ac.currentTime; const o = ac.createOscillator(); const g = ac.createGain(); o.type='sine'; o.frequency.setValueAtTime(880,t); o.frequency.exponentialRampToValueAtTime(1320,t+0.08); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+0.25); o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+0.28);}catch(e){} }
+
+    // Simple applause using noise bursts (no external files)
+    function playApplause(){
+      try{
+        const ac = new (window.AudioContext||window.webkitAudioContext)();
+        const now = ac.currentTime;
+        function burst(at, dur=0.25, vol=0.4){
+          const bufferSize = ac.sampleRate * dur;
+          const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+          const data = buffer.getChannelData(0);
+          for(let i=0;i<bufferSize;i++){ data[i] = (Math.random()*2-1) * Math.exp(-3*i/bufferSize); }
+          const src = ac.createBufferSource(); src.buffer = buffer;
+          const g = ac.createGain(); g.gain.value = vol;
+          src.connect(g); g.connect(ac.destination);
+          src.start(at);
+        }
+        // a few staggered bursts to mimic claps
+        for(let i=0;i<6;i++){ burst(now + 0.05*i, 0.22, 0.35); }
+        for(let i=0;i<8;i++){ burst(now + 0.5 + 0.06*i, 0.18, 0.3); }
+      }catch(e){}
+    }
+
+    // ===== Stage 1: 10s Balloons =====
+    const GOAL = 10; let popped = 0, timer = 10, timerId = null, running = false;
+
+    function startStage1(){
+      show('stage1');
+      $('#needCount').textContent = GOAL; $('#timeLeft').textContent = 10; $('#retry1').style.display = 'none';
+      const area = $('#balloonStage'); area.innerHTML = '';
+      popped = 0; timer = 10; running = true;
+      spawnBalloons(area, 18);
+      timerId = setInterval(()=>{ timer--; $('#timeLeft').textContent = timer; if(timer <= 0){ endStage1(false); } }, 1000);
+    }
+
+    function spawnBalloons(area, n){
+      const { width, height } = area.getBoundingClientRect();
+      for(let i=0;i<n;i++){
+        const b = document.createElement('div'); b.className = 'balloon';
+        const color = COLORS[Math.floor(Math.random()*COLORS.length)];
+        b.style.color = color;
+        b.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.85), ${color} 60%, ${color})`;
+        const x = Math.random()*(width-60);
+        const startY = height + Math.random()*120 + 40;
+        b.style.left = x+"px"; b.style.top = startY+"px";
+        const speed = 0.9 + Math.random()*1.0;
+        const sway = (Math.random()*0.5+0.2) * (Math.random()<0.5?-1:1);
+        let y = startY; let t = Math.random()*1000; let alive = true;
+        const move = () => {
+          if(!alive) return; t += 0.02; y -= speed; const dx = Math.sin(t)*8*sway; b.style.transform = `translateX(${dx}px)`; b.style.top = y+"px";
+          if(y < -80){ alive = false; b.remove(); maybeRespawn(area); }
+          else requestAnimationFrame(move);
+        };
+        b.addEventListener('click', () => {
+          if(!running) return; alive = false; b.classList.add('pop');
+          setTimeout(()=>{ b.remove(); maybeRespawn(area); }, 220);
+          popped++; if(popped >= GOAL){ endStage1(true); }
+        });
+        area.appendChild(b); requestAnimationFrame(move);
+      }
+    }
+    function maybeRespawn(area){ if(running && popped < GOAL) spawnBalloons(area, 1); }
+    function endStage1(success){ running = false; clearInterval(timerId); timerId = null; if(success){ setTimeout(()=>startStage2(), 350); } else { $('#retry1').style.display = 'inline-flex'; $('#retry1').onclick = startStage1; } }
+
+    // ===== Stage 2: Quiz (5 rounds) =====
+    const QUESTIONS = [
+      {q:'Что сказала бы кошка, если бы умела говорить?', opts:['“Ты опять в телефоне?”','“Корми быстрее”','“Я менеджер этого дома”'], correct:1},
+      {q:'Какой суперспособностью обладает тапок?', opts:['Уничтожает насекомых','Исчезает, когда его ищут','Призывает второй тапок'], correct:1},
+      {q:'Что делает человек, когда ищет пульт?', opts:['Переворачивает весь диван','Зовёт соседа','Покупает новый телевизор'], correct:0},
+      {q:'Как понять, что ты взрослый?', opts:['Радость от новых носков','Любишь суп','Понимаешь шутки про кредиты'], correct:2},
+      {q:'Что самое страшное, когда режешь лук?', opts:['Слёзы','Вспоминаешь все ошибки 2014 года','Лук режет тебя в ответ'], correct:1}
+    ];
+    let qi = 0;
+
+    function startStage2(){ show('stage2'); qi = 0; renderQ(); }
+    function renderQ(){
+      const box = $('#qBox'); const item = QUESTIONS[qi];
+      box.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;"><div class="pill">Вопрос ${qi+1}/5</div></div><div style="font-weight:800;font-size:18px;margin-bottom:10px;">${item.q}</div>`;
+      item.opts.forEach((text, idx) => { const btn = document.createElement('div'); btn.className = 'opt'; btn.innerHTML = `<span style="font-weight:800;opacity:.8">${String.fromCharCode(65+idx)})</span> <span>${text}</span>`; btn.onclick = () => selectAnswer(idx === item.correct); box.appendChild(btn); });
+    }
+    function selectAnswer(ok){ if(!ok){ alert('❌ Попробуй ещё раз!'); return; } toastOK(); playChime(); setTimeout(() => { if(qi < QUESTIONS.length - 1){ qi++; renderQ(); } else { startStage3(); } }, 800); }
+
+    // ===== Stage 3: Dodge (hard but possible) =====
+    function startStage3(){ show('stage3'); const area = $('#dodgeArea'); const btn = $('#trickyBtn'); let radiusX = 120, radiusY = 80; const minRX = 45, minRY = 30; let evadeCount = 0; let moving = false; const t0 = performance.now(); const shrink = setInterval(()=>{ radiusX = Math.max(minRX, radiusX - 6); radiusY = Math.max(minRY, radiusY - 4); }, 1500); function moveButton(){ const r = area.getBoundingClientRect(); const bw = btn.offsetWidth || 120; const bh = btn.offsetHeight || 44; const x = Math.random() * (r.width - bw - 20) + 10; const y = Math.random() * (r.height - bh - 20) + 10; btn.style.left = x + 'px'; btn.style.top  = y + 'px'; moving = false; } function maybeDodge(x, y){ const rect = btn.getBoundingClientRect(); const dx = Math.abs(x - (rect.left + rect.width/2)); const dy = Math.abs(y - (rect.top  + rect.height/2)); if(dx < radiusX && dy < radiusY && !moving){ moving = true; evadeCount++; const tired = (performance.now() - t0 > 9000) || (evadeCount > 18); const delay = tired ? 90 : 0; setTimeout(moveButton, delay); } } area.onmousemove = e => maybeDodge(e.clientX, e.clientY); area.ontouchmove = e => { if(e.touches && e.touches[0]){ const t = e.touches[0]; maybeDodge(t.clientX, t.clientY); } }; btn.onclick = () => { clearInterval(shrink); finish(); }; moveButton(); }
+
+    // ===== Finale =====
+    function finish(){
+      show('stage4');
+      // Bigger, punchy message in Russian with emojis
+      $('#finalMsg').textContent = `🎉 С 19‑летием, ${NAME}! 🎂✨`;
+      $('#subMsg').innerHTML = `Пусть этот год принесёт тебе море радости, тёплые объятия, большие победы и бесконечный смех. 🥳🍰`;
+      runConfetti(4200);
+      playApplause();
+
+      // Extra surprise question (in Russian; only word Steve stays in English)
+      const box = $('#extraQ');
+      box.style.display = 'block';
+      box.innerHTML = `
+        <div style="font-weight:800;font-size:18px;margin-bottom:10px;">Ответь на ещё один вопрос — и получи ещё один сюрприз!</div>
+        <div style="margin-bottom:10px">Кто такой <b>Steve</b>?</div>
+      `;
+      [
+        {t:'Мариам', ok:false},
+        {t:'Эмин', ok:false},
+        {t:'Анна', ok:true}
+      ].forEach((o,idx)=>{
+        const btn=document.createElement('div');
+        btn.className='opt';
+        btn.innerHTML=`<span style="font-weight:800;opacity:.8">${String.fromCharCode(65+idx)})</span> <span>${o.t}</span>`;
+        btn.onclick=()=>{
+          if(o.ok){
+            toastOK(); playChime();
+            const msg=document.createElement('div');
+            msg.style.marginTop='10px';
+            msg.style.fontWeight='800';
+            msg.style.lineHeight='1.5';
+            msg.innerHTML='Правильно! Увидимся в Москве! У нас будет столько классного времени там!!!';
+            box.appendChild(msg);
+            runConfetti(3000);
+            playApplause();
+          } else {
+            alert('❌ Попробуй ещё раз!');
+          }
+        };
+        box.appendChild(btn);
+      });
+    }
+
+    $('#startBtn').addEventListener('click', startStage1);
+    $('#againBtn').addEventListener('click', ()=>location.reload());
+
+    // ===== Confetti =====
+    const confettiCanvas = document.getElementById('confettiCanvas');
+    const ctx = confettiCanvas.getContext('2d');
+    const confetti = []; let confettiRAF = null;
+    function resize(){ confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight; }
+    addEventListener('resize', resize); resize();
+
+    function spawnConfetti(n){
+      for(let i=0;i<n;i++){
+        confetti.push({ x: Math.random()*confettiCanvas.width, y: -20 - Math.random()*200, vx: (Math.random()-0.5)*2, vy: 2 + Math.random()*2.5, size: 5 + Math.random()*6, rot: Math.random()*Math.PI, vr: (Math.random()-0.5)*0.2, color: COLORS[Math.floor(Math.random()*COLORS.length)] });
+      }
+    }
+    function drawConfetti(){
+      ctx.clearRect(0,0,confettiCanvas.width, confettiCanvas.height);
+      confetti.forEach(p=>{ p.x += p.vx; p.y += p.vy; p.rot += p.vr; if(p.y > confettiCanvas.height + 20) { p.y = -10; p.x = Math.random()*confettiCanvas.width; } ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color; ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size); ctx.restore(); });
+      confettiRAF = requestAnimationFrame(drawConfetti);
+    }
+    function runConfetti(ms){ spawnConfetti(220); if(!confettiRAF) drawConfetti(); setTimeout(()=>{ cancelAnimationFrame(confettiRAF); confettiRAF = null; }, ms); }
+  </script>
+</body>
+</html>
